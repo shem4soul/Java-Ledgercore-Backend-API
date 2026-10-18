@@ -1,0 +1,23 @@
+ledgercore:
+  jwt:
+    secret: test-secret-test-secret-test-secret-123456
+  security:
+    auth-requests-per-minute: 100000
+    bcrypt-strength: 4
+    max-failed-logins: 5
+  outbox:
+    enabled: false            # tests drive the publisher manually for determinism
+    max-attempts: 3
+    base-backoff: PT0S
+    max-backoff: PT0S
+  bootstrap:
+    admin-email: admin@ledgercore.test
+    admin-password: Admin-Passw0rd-Test1
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: 40
+logging:
+  level:
+    root: WARN
+    com.ledgercore: INFO

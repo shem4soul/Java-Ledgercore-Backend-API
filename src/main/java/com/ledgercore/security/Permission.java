@@ -1,0 +1,16 @@
+package com.ledgercore.security;
+
+public enum Permission {
+    TRANSFER_CREATE,
+    ACCOUNT_READ_OWN,
+    ACCOUNT_READ_ANY,
+    ACCOUNT_FREEZE,
+    ACCOUNT_LIMIT_UPDATE,
+    LEDGER_ADJUST,
+    TRANSACTION_READ_ANY,
+    TRANSACTION_REVERSE,
+    USER_MANAGE,
+    AUDIT_READ,
+    OUTBOX_MANAGE,
+    RECONCILE_RUN
+}

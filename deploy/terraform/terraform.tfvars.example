@@ -1,0 +1,8 @@
+aws_region            = "eu-west-1"
+image_tag             = "bootstrap"                       # push this tag to ECR before the first full apply
+acm_certificate_arn   = "arn:aws:acm:eu-west-1:123456789012:certificate/xxxxxxxx"
+cors_origins          = "https://app.yourdomain.com"
+bootstrap_admin_email = "admin@yourdomain.com"
+alarm_email           = "oncall@yourdomain.com"
+github_repo           = "your-org/ledgercore"
+db_multi_az           = true

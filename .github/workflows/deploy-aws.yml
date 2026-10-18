@@ -1,0 +1,89 @@
+name: Deploy to AWS (ECS Fargate)
+
+# Runs after CI succeeds on main. Uses GitHub OIDC (no long-lived AWS keys) and the "production" environment,
+# which you can protect with required reviewers in Settings > Environments.
+on:
+  workflow_run:
+    workflows: [CI]
+    branches: [main]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false      # never interrupt a rolling deployment
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}          # e.g. ledgercore-prod
+  ECS_CLUSTER: ${{ vars.ECS_CLUSTER }}                # e.g. ledgercore-prod
+  ECS_SERVICE: ${{ vars.ECS_SERVICE }}                # e.g. ledgercore-prod
+  ECS_TASK_FAMILY: ${{ vars.ECS_TASK_FAMILY }}        # e.g. ledgercore-prod
+  CONTAINER_NAME: ledgercore
+
+jobs:
+  deploy:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - id: meta
+        run: echo "tag=${{ github.event.workflow_run.head_sha || github.sha }}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build and push image (immutable tag = git SHA)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.meta.outputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Terraform owns the task definition shape (secrets, CPU, env); the pipeline only swaps the image.
+      - name: Download current task definition
+        run: |
+          aws ecs describe-task-definition --task-definition "$ECS_TASK_FAMILY" \
+            --query taskDefinition > task-definition.json
+
+      - id: render
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          container-name: ${{ env.CONTAINER_NAME }}
+          image: ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.meta.outputs.tag }}
+
+      - name: Deploy (rolling update with circuit-breaker rollback)
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+          wait-for-minutes: 15
+
+      - name: Post-deploy smoke test
+        if: ${{ vars.APP_URL != '' }}
+        run: |
+          for i in $(seq 1 12); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "${{ vars.APP_URL }}/v3/api-docs") && [ "$code" = "200" ] && echo "healthy" && exit 0
+            sleep 10
+          done
+          echo "Smoke test failed (last status: $code)"; exit 1
