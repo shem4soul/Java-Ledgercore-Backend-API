@@ -202,8 +202,4 @@ src/test/java/com/ledgercore      unit + *IT integration, concurrency, failure-r
 scripts/                          database-level verification (psycopg2)
 deploy/terraform · deploy/observability · .github/workflows · Dockerfile · docker-compose.yml
 ```
-Author
-Emmanuel Seun Shittu, Software Engineer
 
-GitHub: github.com/shem4soul
-LinkedIn: linkedin.com/in/emmanuel-shittu91573915a
